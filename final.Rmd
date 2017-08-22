@@ -1,0 +1,270 @@
+---
+title: "36-402 Final Exam"
+author: "Apoorva Havanur, ahavanur"
+date: "5/7/2017"
+fontsize: 12pt
+output:
+  pdf_document: default
+  html_document: default
+geometry: margin=1.0in
+---
+\newcommand{\question}[2] {\vspace{.25in} \hrule\vspace{0.5em}
+\noindent{\bf #1: #2} \vspace{0.5em}
+\hrule \vspace{.10in}}
+\renewcommand{\part}[1] {\vspace{.10in} {\bf (#1)}}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+\question{Question 1. Diabetes} \newline
+\part{Part 1.} \newline
+a. 
+```{r}
+data = read.csv("diabetes.csv")
+library(mgcv)
+library(lattice)
+additive.model = gam(c.peptide ~ s(age) + s(base.deficit), data = data)
+summary(additive.model)
+plot(additive.model, pages = 1, residuals = TRUE)
+```
+\newline 
+The figures above display the partial responce functions for both the predictor variables. As shown above, the residuals are spread randomly around the trend line. For age, the graph shows how it initially increases, and then flattens out and slightly decreases around age 13. With base deficit, the value trends upwards, slowly between -30 and -20, but then more rapidly from -20 onwards until 0. \newline
+b.
+```{r}
+diab.grid <- expand.grid(age = seq(from = min(data$age), to = max(data$age), length.out = 25), base.deficit = seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out = 25))
+pred.diab <- predict(additive.model, newdata = diab.grid, type = "response")
+wireframe(pred.diab ~ diab.grid$age*diab.grid$base.deficit, xlab = "Age (Years)", ylab = "Base Deficit (%)", zlab = "C-Peptide\n (pm/mm)", scales = list(arrows = FALSE), cex = 0.25, main = "Wireframe of Predicted C-Peptide Surface")
+```
+\newline 
+From the surface above, we can see that the C-peptide concentration increases with age, although it increases more slowly as age increases. C-peptide decreases as base deficit becomes more negative, but it decreases more slowly the larger the deficit becomes. \newline
+\part{Part 2.} \newline
+a + b
+```{r}
+age.5 = data.frame(base.deficit = seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out =50), age = rep(5, length.out = 50))
+pred.diab.5 = predict(additive.model, newdata = age.5, type = "response")
+
+age.10 = data.frame(base.deficit = seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out =50), age = rep(10, length.out = 50))
+pred.diab.10 = predict(additive.model, newdata = age.10, type = "response")
+
+age.12 = data.frame(base.deficit = seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out =50), age = rep(12, length.out = 50))
+pred.diab.12 = predict(additive.model, newdata = age.12, type = "response")
+
+plot.5.add = function(x) {predict(additive.model, newdata = data.frame(base.deficit = x, age = 5), type = "response")}
+plot.10.add = function(x) {predict(additive.model, newdata = data.frame(base.deficit = x, age = 10), type = "response")}
+plot.12.add = function(x) {predict(additive.model, newdata = data.frame(base.deficit = x, age = 12), type = "response")}
+
+curve(plot.5.add, seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out = 50), xlab = "Base Deficit (Percentage)", ylab = "Predictive C-peptide Concentration (pm/mm)", lwd = 5)
+curve(plot.10.add, seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out = 50), xlab = "Base Deficit (Percentage)", ylab = "Predictive C-peptide Concentration (pm/mm)", col = "blue", add = TRUE, lty = 2, lwd = 5)
+curve(plot.12.add, seq(from = min(data$base.deficit), to = max(data$base.deficit), length.out = 50), ylab = "Predicted C-peptide Concentration (pm/mm)", col = "green", add = TRUE, lty = 3, lwd = 5)
+legend("bottomright", lwd = c(3,3,3), col = c("black", "blue", "green"), lty = c(1,2,3), legend=c("Age = 5", "Age = 10", "Age = 12"))
+```
+\newline c. \newline Yes the three lines are parallel, as they should be. Since we are using an additive model, the predicted response value, when plotted against one of the predictor variables, should have the same slope no matter what the value of the other predictor is, since the functions that the two predictors are put through are seperate, and therefore this isn't any joint modeling occuring. \newline
+\part{Part 3.}\newline
+```{r}
+library(np)
+kern.reg.bw = npregbw(formula = c.peptide ~ age + base.deficit, data = data)
+kern.reg = npreg(kern.reg.bw, data = data)
+pred.kern = predict(kern.reg, newdata = diab.grid, type = "response")
+wireframe(pred.kern ~ diab.grid$age*diab.grid$base.deficit, xlab = "Age (Years)", ylab = "Base Deficit (%)", zlab = "C-Peptide\n(pm/mm)", scales = list(arrows = FALSE), theta = 60, main = "Kernel Regression Surface", cex = 0.25)
+```
+\newline The figure above shows the surface of the kernel regression. Compared to the additive model, the kernel regression surface is much more varied, with much more curvature and bumps than the additive model. \newline
+b. 
+```{r}
+pred.diab.5.kern = predict(kern.reg, newdata = age.5, type = "response")
+pred.diab.10.kern = predict(kern.reg, newdata = age.10, type = "response")
+pred.diab.12.kern = predict(kern.reg, newdata = age.12, type = "response")
+
+plot.5 = function(x) {predict(kern.reg, newdata = data.frame(base.deficit = x, age = 5), type = "response")}
+plot.10 = function(x) {predict(kern.reg, newdata = data.frame(base.deficit = x, age = 10), type = "response")}
+plot.12 = function(x) {predict(kern.reg, newdata = data.frame(base.deficit = x, age = 12), type = "response")}
+curve(plot.5, age.5$base.deficit, xlab = "Base Deficit", ylab = "C-Peptide Prediction", lwd = 5, lty = 1)
+curve(plot.10, age.10$base.deficit, add = TRUE, col = 'red', lwd = 5, lty = 2)
+curve(plot.12, age.12$base.deficit, add = TRUE, col = 'blue', lwd = 5, lty = 3)
+legend("bottomright", lwd = c(3,3,3), col = c("black", "red", "blue"), lty = c(1,2,3), legend=c("Age = 5", "Age = 10", "Age = 12"))
+```
+\newline As seen in the figure above, the curves from the kernel regression are not parallel to each other. We shouldn't have expected them to be, since the kernel regression estimates the joint density, and thus for different ages, a different type of curve would be produced. This leads to the kernel regression have lower bias that the generalized additive model, but a much higher variance. \newline
+\part{Part 4.} \newline
+a. In order to see whether or not to add the interaction effect, one can compare the larger model to the reduced model using an F-test on the final predictor (the interaction effect), using an low enough alpha value, like alpha = 0.05. If the p-value from the F-test is low, then we know that the additional indicator is worth keeping in the model, and if not, then we can continue to use our old model. \newline
+b. The F-test helps us to determine if the added interaction effect is having a significant reduction in our residual sum of squares (RSS). We know that if we pick the old model, it is because the full model with the interaction effect is increasing the variance of our model without signficiantly reducing the bias of it, and therefore, is not worth including. \newline
+c. We know that this method will be reliable because it does not rely on any randomized sampling or bootstrapping. Therefore, running this procedure multiple times will always yield the same results, and thus, it will be reliable. \newline
+d. 
+```{r}
+full.model = gam(c.peptide ~ s(age) + s(base.deficit) + s(base.deficit, by = age), data = data)
+anova.gam(full.model, additive.model, test = "F")
+```
+From the output above, we can see that the p-value from the F-test is 15.6%. Since that is above our alpha, we will continue to use our old model. 
+\part{Part 5.} \newline
+a
+```{r}
+mean.frame.base = data.frame(age = data$age, base.deficit = rep(mean(data$base.deficit), length.out = nrow(data)))
+pred.age.mean = predict(additive.model, newdata = mean.frame.base)
+coef(lm(pred.age.mean ~ data$age))[[2]]
+```
+On average, holding a patient's base deficit constant, a one year increase in a patients age is expected to be associated with an increase in their C-peptide concentration of 0.065 picomoles per millileter than what it was before. \newline
+b.
+```{r}
+mean.frame.age = data.frame(base.deficit = data$base.deficit, age = rep(mean(data$age), length.out = nrow(data)))
+pred.base.mean = predict(additive.model, newdata = mean.frame.age)
+sd(data$base.deficit)
+sd(data$base.deficit)/10*coef(lm(pred.base.mean ~ data$base.deficit))[[2]]
+```
+The standard deviation in base.deficit is approximately 7.12. Therefore, a 1/10th standard deviation increase in the acidity of blood is, on average, expected to be associated with a 0.0273 picomoles per millileter increase over what it was originally, holding age constant. \newline
+c. 
+```{r}
+set.seed(0)
+age.coefs = c()
+base.coefs = c()
+for (i in 1:1000) {
+  indexes = sample(1:nrow(data), size = nrow(data), replace = TRUE)
+  data.new = data[indexes,]
+  add.model.boot = gam(c.peptide ~ s(age) + s(base.deficit), data = data.new)
+  mean.frame.base.new = data.frame(age = data.new$age, base.deficit = rep(mean(data.new$base.deficit), length.out = nrow(data.new)))
+  mean.frame.age.new = data.frame(base.deficit = data.new$base.deficit, age = rep(mean(data.new$age), length.out = nrow(data.new)))
+  pred.age.mean.new = predict(add.model.boot, newdata = mean.frame.age.new)
+  pred.base.mean.new = predict(add.model.boot, newdata = mean.frame.base.new)
+  base.coefs = c(base.coefs, coef(lm(pred.age.mean.new ~ data.new$base.deficit))[[2]]*sd(data.new$base.deficit)/10)
+  age.coefs = c(age.coefs, coef(lm(pred.base.mean.new ~ data.new$age))[[2]])
+}
+sd(age.coefs)
+sd(base.coefs)
+```
+To calculate the average predicted change standard error, I ran a bootstrap sample by cases, fitting the additive model onto each new dataset and calculating the predicted change for both variables each time. Then, with all the available values, I calculated the standard deviation for each. For age, the standard error was 0.048, while for base deficit, it was 0.019. \newline
+d. 
+```{r}
+diff = age.coefs - base.coefs
+sd(diff)
+```
+The standard error of the difference in these average predicted changes is 0.056. \newline
+e. I would be inclined to believe that changing the base deficit would be better than trying to change age. There is no way of controlling someone's age, and a change in age tends to be associated with many other biological changes that cannot be controlled for either. A person's base deficit, however, seems much more capable of being regulated by doctors and other healthcare experts, and so even though the change in C-peptide might not be as large, because of how much better it is to monitor and control, it wouuld be the best. However, because of how many other factors are lurking in an issue as complicated as diabetes, we cannot be fully sure of this solution. \newline
+\part{Part 6.}\newline
+  In order to better help treat those with Type I diabetes, doctors are interested in ways of boosting a person's insulin levels. Our dataset gave us information on 43 patients with diabetes, along with their age and a measure of how acid their blood is compared to normal levels (a base deficit), and asked to predict the patient's C-peptide concentration, which is being used as a proxy to measure insulin. \newline \newline
+  To do this, we fit what is known as a "generalized additive model", fitting a prediction function onto each of our predictors and then adding them together to get a prediction about the C-peptide concentration. We saw from our model that C-peptide levels increases dramatically during early ages, but the increase slowed down more and more as the patient got older. Conversely, as high base deficits (more negative values) increase, the change in C-peptide levels was small, but gradually increased the closer the patient got to 0 deficit. \newline \newline
+  On average, each additional year that a patient grew older, assuming their base deficit remained the same, was associated with an increase in their C-peptide concentration of 0.065 picomoles per millileter than what it was before. Similarly, a 0.712 increase in the acidity level of the patient's blood is (decrease in base deficit), on average, expected to be associated with a 0.0273 picomoles per millileter increase over what it was originally, while they are the same age. \newline \newline
+  Ultimately, based on the data, it would appear that one could increase C-peptide levels in patients by targeting their blood base deficit levels. Our model suggests that decreasing this deficit is related to positive increases in C-peptide concentration. The next steps would appear to be to set up randomized trials and test to see if this effect does positively impact Type I diabetics, and continue to do more research on the potential reasons for this association. \newline \newline
+\question{2. Impact of Labor Training Programs on Earnings}\newline
+\part{Part 1.}\newline
+```{r}
+library(dplyr)
+treated = read.table("nswre74_treated.txt")
+colnames(treated) = c("treatment", "age", "education", "black", "hispanic", "married", "nodegree", "re74", "re75", "re78")
+treated$degree = as.numeric(treated$nodegree == 0) #nodegree is not intuitve, so i am flipping the order
+treated$nodegree <- NULL
+non_treated = read.table("psid_controls.txt")
+colnames(non_treated) = c("treatment", "age", "education", "black", "hispanic", "married", "nodegree", "re74", "re75", "re78")
+non_treated$degree = as.numeric(non_treated$nodegree == 0)
+non_treated$nodegree <- NULL
+make_bar_chart = function(name, place) {
+  treated_data = table(treated[,which(colnames(treated) == name)])/nrow(treated)
+  non_treated_data = table(non_treated[,which(colnames(non_treated) == name)])/nrow(non_treated)
+  data_matrix = rbind(treated_data, non_treated_data)
+  barplot(data_matrix, beside = TRUE, xlab = name, col = c("blue", "dark green"), ylab = "Proportion of Observations")
+  legend(place, fill = c("blue", "dark green"), legend=c("Treated", "Non-Treated"), cex = 0.25)
+}
+par(mfrow = c(3,5))
+data = rbind(treated, non_treated)
+data %>% group_by(treatment) %>% select(one_of(colnames(data))) %>% summarize_all(funs(mean(., na.rm = T)))
+barplot(table(as.numeric(data$treatment))/nrow(data), xlab = "Treatment")
+hist(non_treated$age, col = "dark green", main = "Control: Age")
+hist(treated$age, col = "blue", main = "Treated: Age")
+hist(non_treated$education, col = "dark green", main = "Control: Edu.")
+hist(treated$education, col = "blue", main = "Treated: Edu.")
+make_bar_chart("black","topleft")
+make_bar_chart("hispanic", "topright")
+make_bar_chart("married", "center")
+make_bar_chart("degree", "topright")
+hist(non_treated$re74, col = "dark green", main = "Control: RE74")
+hist(treated$re74, col = "blue", main = "Treated: RE74")
+hist(non_treated$re75, col = "dark green", main = "Control: RE75")
+hist(treated$re75, col = "blue", main = "Treated: RE75")
+hist(non_treated$re78, col = "dark green", main = "Control: RE78")
+hist(treated$re78, col = "blue", main = "Treated: RE78")
+```
+\newline 
+Above are the graphs created as part of my EDA process. Several insights can be gleamed from these plots that are relevant to our investigation about the effects of the job training program. Pre-treatment, the two groups differ greatly in terms of their makeup. The average age of the treatment group is 25.82, while the average age of the control group is 34.85. Intuitively, we know that age is correlated with earnings, and so this leads us to conclude that we should include age in our final calculation. Similarly, the proporiton of people in the treatment group that are black is 84.3%, compared to 25% in the control group. Since race is also highly correlated with earnings, race must also be accounted for. However, the hispanic proportion of both groups is relatively equal, at 3.2% and 5.9% for the treatment group and control group respectively, which would lead us considering dropping that variable from our model for being relatively equal between the two groups. The control group, as expected, is much more likely to be married than the treatment group, and are more likely to have a degree than the treatment group. These are all indications that the two groups are not homogenous - the difference in means between the two groups earnings will be based on many factors in their demographics that are unrelated to the job training program. \newline
+Furthermore, the reported earnings of both groups differ wildly for each year on record, with the control group making far more than the treatment group each year. However, this is also to be expected - a person would not enter a labor training program if they were making a lot of money already. Interestingly, the difference between earnings from 1975 to 1978 is greater for the treatment group than the control group - implying that the program did have some kind of impact in increasing a person's earnings that what it would have been without the training. \newline
+\part{Part 2.}\newline
+```{r}
+library(glmnet)
+indexes = rep(seq(from= 1, to = 10), length.out= nrow(data))
+lasso.min = c()
+lasso.1se = c()
+ridge.min = c()
+ridge.1se = c()
+log.errors = c()
+for (i in 1:10) {
+  test = data[which(indexes ==i),]
+  train = data[which(indexes != i),]
+  X.train = model.matrix(treatment ~ ., data = train)[,-1]
+  y.train = train$treatment
+  X.test = model.matrix(treatment ~ ., data = test)[,-1]
+  y.test = test$treatment
+  lasso.model = cv.glmnet(X.train, y= y.train, alpha=1, family = "binomial")
+  lasso.test.predictions.min = predict(lasso.model, newx = X.test, s = lasso.model$lambda.min, type = "response")
+  lasso.test.predictions.1se = predict(lasso.model, newx = X.test, s = lasso.model$lambda.1se, type = "response")
+  lasso.min.error = mean((y.test - as.numeric(lasso.test.predictions.min >= 0.5))^2)
+  lasso.1se.error = mean((y.test - as.numeric(lasso.test.predictions.1se >= 0.5))^2)
+  lasso.min[i] = lasso.min.error
+  lasso.1se[i] = lasso.1se.error
+  
+  ridge.model = cv.glmnet(X.train, y= y.train, alpha=0, family = "binomial")
+  ridge.test.predictions.min = predict(ridge.model, newx = X.test, s = ridge.model$lambda.min, type = "response")
+  ridge.test.predictions.1se = predict(ridge.model, newx = X.test, s = ridge.model$lambda.1se, type = "response")
+  ridge.min.error = mean((y.test - as.numeric(ridge.test.predictions.min >= 0.5))^2)
+  ridge.1se.error = mean((y.test - as.numeric(ridge.test.predictions.1se >= 0.5))^2)
+  ridge.min[i] = ridge.min.error
+  ridge.1se[i] = ridge.1se.error
+  
+  log.model = glm(treatment ~ ., data = train, family = "binomial")
+  log.predictions = predict(log.model, newdata = test)
+  log.error = mean((test$treatment - as.numeric(log.predictions >= 0.5))^2)
+  log.errors[i] = log.error
+}
+lasso.min.mean = mean(lasso.min)
+lasso.1se.mean = mean(lasso.1se)
+ridge.min.mean = mean(ridge.min)
+ridge.1se.mean = mean(ridge.1se)
+log.mean = mean(log.errors)
+
+c(lasso.min.mean, lasso.1se.mean, ridge.min.mean, ridge.1se.mean, log.mean)
+X.data = model.matrix(treatment ~ ., data = data)[,-1]
+y.train = data$treatment
+final.model = cv.glmnet(x = X.data, y = y.train, alpha=1, family = "binomial")
+coef.cv.glmnet(final.model, s = "lambda.min")
+final.predictions = predict(final.model, newx=X.data, s = "lambda.min", type = "response")
+treated.predictions = final.predictions[which(data$treatment == 1),]
+non.treated.predictions = final.predictions[which(data$treatment == 0),]
+summary(treated.predictions)
+summary(non.treated.predictions)
+hist(treated.predictions)
+hist(non.treated.predictions)
+```
+\newline I used a logistic regression model in order to determine the propensity score, since logistic regression naturally lends itself to calculating a probability. To fit the best model, I ran 10-fold cross validation, comparing the results of a standard logitistic regression fit to the logistic lasso regression and the logistic ridge regression penalities (using the lambda min, and the lambda1se). Out of these 5, I selected the one with the lowest classification error, and used that as my final model. \newline
+Above, we can also see the region of common support for the model with the treated subjects vs. the control, and see that it is very large, which shows that our model achieves its purpose. \newline
+\part{Part 3.}\newline
+```{r}
+library(MatchIt)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+mod_match = matchit(treatment ~ age + education + black + hispanic + married + re74 + re75 + re78 + degree, data = data, method = "nearest", distance = "logit")
+mod_match
+matches = match.data(mod_match)
+dim(matches)
+matches %>% 
+  group_by(treatment) %>% 
+  select(one_of(colnames(data))) %>% 
+  summarize_all(funs(mean))
+lapply(colnames(data)[-1], function(v) {
+  print(v)
+  t.test(matches[, v] ~ matches$treatment)$p.value
+})
+```
+
+Per the output above, we can see that our matching algorithm successfully matched all of the patients in our treatment dataset. From the summary of the matched dataset, we see that overall, the matching algorithm did a decent job in matching patients, with the exception of matching on age, marriage, and reported earnings in 74 and 75. However, as noted in the EDA, the treatment group and the control group varied wildly on these covariates, and the matching algorithm did a good job in narrowing the gap. For further proof apart from the table, a series of t-tests show that the values are similar with most of the predictiors, apart from the ones mentioned. \newline
+\part{Part 4.}\newline
+```{r}
+lm_treat = lm(re78 ~ treatment + re74 + age + married, data = matches)
+summary(lm_treat)
+```
+The average treatment effect of the treated, according to the summary output above, is $705.31. This means that those who do recieve treatment, when adjusting for all other variables (by matching, or by including them in the linear model), are expected to make \$705.31 more than those in similar circumstances that did not recieve treatment. \newline
+It is important to note however that this value for treatment has a high p-value in the linear model, suggesting that the value might not be significant, and that the average treatment effect is actually 0. This suggests that the program might not be effective after all, and that other factors are contributing more than the treatment does. Further research and investigation are required, potentially increasing the sample size of the study, or conducting completely randomized studies in order to account for the differences in the treatment and control group. 

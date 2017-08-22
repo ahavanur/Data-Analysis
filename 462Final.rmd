@@ -1,0 +1,381 @@
+---
+title: "36-492 Final Project"
+author: "Sameer Dhavalikar"
+header-includes:
+  - \usepackage[fleqn]{amsmath}
+output: html_document
+---
+
+```{r, message=F, warning=F, cache = TRUE}
+#Initial EDA
+
+set.seed(0)
+
+data = read.csv("flights2015.csv")
+attach(data)
+
+#Remove NAs in response variable vector
+data = subset(data, data$DEP_DEL15 == 0 | data$DEP_DEL15 == 1)
+
+#Base rate before removing variables
+sum(as.numeric(data$DEP_DEL15))/nrow(data)
+
+#Since we are only concerned about predicting flights departing from PIT, we will only keep data points with ORIGIN = PIT
+data = subset(data, data$ORIGIN == "PIT")
+
+head(data, 15)
+nrow(data)
+length(data)
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+#Checking percent of NA values in each column to clean the data
+sort(signif(colSums(is.na(data)) / nrow(data) * 100, 3), decreasing = T)
+
+#Removed, because cannot test using these variables
+data$ARR_TIME <- NULL
+data$ARR_TIME_BLK <- NULL
+data$DEP_TIME <- NULL
+data$TAXI_IN <- NULL
+data$TAXI_OUT <- NULL
+data$WHEELS_ON <- NULL
+data$WHEELS_OFF <- NULL
+data$AIR_TIME <- NULL
+data$ACTUAL_ELAPSED_TIME <- NULL
+
+#Removed because over 97% of all values were NA
+data$FIRST_DEP_TIME <- NULL
+data$TOTAL_ADD_GTIME <- NULL
+data$LONGEST_ADD_GTIME <- NULL
+data$CARRIER_DELAY <- NULL
+data$WEATHER_DELAY <- NULL
+data$NAS_DELAY <- NULL
+data$SECURITY_DELAY <- NULL
+data$LATE_AIRCRAFT_DELAY <- NULL
+
+#Removed because the variables are redundant with values of other similar variables
+data$ORIGIN <- NULL
+data$ORIGIN_CITY_NAME <- NULL
+data$ORIGIN_STATE_ABR <- NULL
+data$ORIGIN_STATE_FIPS <- NULL
+data$FL_DATE <- NULL
+data$FLIGHTS <- NULL
+data$YEAR <- NULL
+data$DEST_CITY_MARKET_ID <- NULL
+data$DEST_AIRPORT_SEQ_ID <- NULL
+data$DEST_AIRPORT_ID <- NULL
+data$ORIGIN_CITY_MARKET_ID <- NULL
+data$ORIGIN_AIRPORT_SEQ_ID <- NULL
+data$FL_NUM <- NULL
+data$AIRLINE_ID <- NULL
+data$ORIGIN_AIRPORT_ID <- NULL
+data$DEST_CITY_NAME <- NULL
+data$DEST_WAC <- NULL
+data$DEST <- NULL
+data$DEST_STATE_FIPS <- NULL
+data$DEST_STATE_NM <- NULL
+data$DEP_TIME_BLK <- NULL
+data$ORIGIN_STATE_NM <- NULL
+data$ORIGIN_WAC <- NULL
+data$UNIQUE_CARRIER <- NULL
+data$CANCELLATION_CODE <- NULL
+data$DIVERTED <- NULL
+data$CANCELLED <- NULL
+data$DISTANCE <- NULL
+data$DISTANCE_GROUP <- NULL
+
+#Removed because they are literally calculated from the values of the CRS and original DEP/ARR times
+data$DEP_DELAY <- NULL
+data$DEP_DELAY_NEW <- NULL
+data$DEP_DELAY_GROUP <- NULL
+data$ARR_DELAY <- NULL
+data$ARR_DELAY_NEW <- NULL
+data$ARR_DELAY_GROUP <- NULL
+data$ARR_DEL15 <- NULL
+
+data = na.omit(data)
+nrow(data)
+
+#We see that the TAIL_NUM predictor has 2770 different values, which will make it very difficult to make a tree, so we will remove this variable.
+sapply(data[, sapply(data, is.factor)], nlevels)
+data$TAIL_NUM <- NULL
+
+#Since the 2016 data has more levels than the 2015 data for the CARRIER variable, we will look to make the variable binary
+#First, we will look at the percentage of delayed flights for each airline
+for(factor in levels(data$CARRIER)){
+ percent = sum(as.numeric(data$DEP_DEL15)[data$CARRIER == factor])/length(data$CARRIER ==  factor)
+ print(paste(factor, ": ", signif(percent*100,4), "%"))
+}
+
+#We see that "WN" (Southwest Airlines) flights have the highest percentage of their flights delayed out of all the airlines, so we will make this variable binary
+data$CARRIER = as.factor(ifelse(data$CARRIER == "WN", 1, 0))
+
+#Force DAY_OF_MONTH, MONTH to have all possible levels
+days = levels(as.factor(data$DAY_OF_MONTH))
+data$DAY_OF_MONTH = factor(data$DAY_OF_MONTH, days)
+months = levels(as.factor(data$MONTH))
+data$MONTH = factor(data$MONTH, months)
+states = c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY")
+data$DEST_STATE_ABR = factor(data$DEST_STATE_ABR, states)
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+#Base rate after removing variables
+sum(as.numeric(data$DEP_DEL15))/nrow(data)
+
+#Separate overall dataset into train and test sets (1/3 of data is test, 2/3 is train)
+s = 1:nrow(data)
+test = data[which(s%%3 == 1),]
+train = data[which(s%%3 != 1),]
+nrow(test)
+nrow(train)
+
+X_train = model.matrix(DEP_DEL15~., data = train)
+y_train = train$DEP_DEL15
+X_test = model.matrix(DEP_DEL15~., data = test)
+y_test = test$DEP_DEL15
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+library(glmnet)
+
+#First, we try a Logistic Lasso Regression model since it is both simple and interpretable
+#Fit Logistic Lasso Regression on training dataset
+lasso = cv.glmnet(X_train, y_train, alpha = 1, nfolds = 5)
+#Predict models on testing datasets
+lasso.test.predictions.min = predict(lasso, newx = X_test, s = lasso$lambda.min)
+lasso.test.predictions.1se = predict(lasso, newx = X_test, s = lasso$lambda.1se)
+#Calculate average squared prediction errors on testing datasets
+lasso.test.prediction.error.min = mean((y_test-lasso.test.predictions.min) ^ 2)
+lasso.test.prediction.error.1se = mean((y_test-lasso.test.predictions.1se) ^ 2)
+#Report average squared prediction errors on testing datasets
+lasso.test.prediction.error.min
+lasso.test.prediction.error.1se
+#Report estimated errors from cross validation
+idx.min = which(lasso$lambda == lasso$lambda.min, TRUE)
+lasso$cvm[idx.min]
+idx.1se = which(lasso$lambda == lasso$lambda.1se, TRUE)
+lasso$cvm[idx.1se]
+#Plots of the cross validation curves of Lasso Regression
+plot(lasso, main = "Lasso Regression: MSE vs log(Lambda)")
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+#Next, we try ridge regression because Lasso doesn't perform well if coefficients in true regression function are moderately large.
+#Fit Logistic Ridge Regression on training dataset
+ridge = cv.glmnet(X_train, y_train, alpha = 0, nfolds = 5)
+#Predict models on testing datasets
+ridge.test.predictions.min = predict(ridge, newx = X_test, s = ridge$lambda.min)
+ridge.test.predictions.1se = predict(ridge, newx = X_test, s = ridge$lambda.1se)
+#Calculate average squared prediction errors on testing datasets
+ridge.test.prediction.error.min = mean((y_test-ridge.test.predictions.min)^2)
+ridge.test.prediction.error.1se = mean((y_test-ridge.test.predictions.1se)^2)
+#Report average squared prediction errors on testing datasets
+ridge.test.prediction.error.min
+ridge.test.prediction.error.1se
+#Report estimated errors from cross validation
+idx.min = which(ridge$lambda == ridge$lambda.min, TRUE)
+ridge$cvm[idx.min]
+idx.1se = which(ridge$lambda == ridge$lambda.1se, TRUE)
+ridge$cvm[idx.1se]
+#Plots of the cross validation curves of Ridge Regression
+plot(ridge, main = "Ridge Regression: MSE vs log(Lambda)")
+
+#We see that our Logistic Lasso Regression model has a much lower test error MSE than the Logistic Ridge Regression model
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+#Now, we try a Random Forest since it is both flexible and powerful but not very interpretable. The differences between our two models (Logistic Lasso and Random Forest) will tell us what we might be ignoring in our simple model (Lasso) in order to make it better at predicting.
+#Random Forest
+library(randomForest)
+
+forest = randomForest(as.factor(DEP_DEL15)~., data = train, ntree = 500, cutoff = c(.4,.6))
+
+#Train error
+forest.y.tr = predict(forest, newdata = train)
+forest.tr.err = mean(as.factor(y_train) != forest.y.tr)
+forest.tr.err
+
+#Test error
+forest.y.te = predict(forest, newdata = test)
+forest.te.err = mean(as.factor(y_test) != forest.y.te)
+forest.te.err
+
+#Out of bag error
+forest.bag.err = rev(forest$err.rate[,1])[1]
+forest.bag.err
+
+varImpPlot(forest)
+```
+
+
+```{r, message=F, warning=F, cache = TRUE}
+data2 = read.csv("flights2016_visible.csv")
+
+#Subsetting and removing variables as in training data
+data2 = subset(data2, data2$ORIGIN == "PIT")
+data2$ACTUAL_ELAPSED_TIME <- NULL
+data2$ARR_TIME <- NULL
+data2$ARR_TIME_BLK <- NULL
+data2$DEP_TIME <- NULL
+data2$TAXI_IN <- NULL
+data2$TAXI_OUT <- NULL
+data2$WHEELS_ON <- NULL
+data2$WHEELS_OFF <- NULL
+data2$AIR_TIME <- NULL
+data2$FIRST_DEP_TIME <- NULL
+data2$TOTAL_ADD_GTIME <- NULL
+data2$LONGEST_ADD_GTIME <- NULL
+data2$CARRIER_DELAY <- NULL
+data2$WEATHER_DELAY <- NULL
+data2$NAS_DELAY <- NULL
+data2$SECURITY_DELAY <- NULL
+data2$LATE_AIRCRAFT_DELAY <- NULL
+data2$ORIGIN <- NULL
+data2$ORIGIN_CITY_NAME <- NULL
+data2$ORIGIN_STATE_ABR <- NULL
+data2$ORIGIN_STATE_FIPS <- NULL
+data2$FL_DATE <- NULL
+data2$YEAR <- NULL
+data2$DEST_CITY_MARKET_ID <- NULL
+data2$DEST_AIRPORT_SEQ_ID <- NULL
+data2$DEST_AIRPORT_ID <- NULL
+data2$ORIGIN_CITY_MARKET_ID <- NULL
+data2$ORIGIN_AIRPORT_SEQ_ID <- NULL
+data2$FL_NUM <- NULL
+data2$FLIGHTS <- NULL
+data2$AIRLINE_ID <- NULL
+data2$ORIGIN_AIRPORT_ID <- NULL
+data2$DEST_CITY_NAME <- NULL
+data2$DEST_WAC <- NULL
+data2$DEST <- NULL
+data2$DEST_STATE_FIPS <- NULL
+data2$DEST_STATE_NM <- NULL
+data2$DEP_TIME_BLK <- NULL
+data2$ORIGIN_STATE_NM <- NULL
+data2$ORIGIN_WAC <- NULL
+data2$UNIQUE_CARRIER <- NULL
+data2$CANCELLATION_CODE <- NULL
+data2$DEP_DELAY <- NULL
+data2$DEP_DELAY_NEW <- NULL
+data2$DEP_DELAY_GROUP <- NULL
+data2$ARR_DELAY <- NULL
+data2$ARR_DELAY_NEW <- NULL
+data2$ARR_DELAY_GROUP <- NULL
+data2$ARR_DEL15 <- NULL
+data2$DIVERTED <- NULL
+data2$CANCELLED <- NULL
+data2$DISTANCE <- NULL
+data2$DISTANCE_GROUP <- NULL
+data2 = na.omit(data2)
+data2$TAIL_NUM <- NULL
+data2$CARRIER = as.factor(ifelse(data2$CARRIER == "WN", 1, 0))
+data2$DAY_OF_MONTH = factor(data2$DAY_OF_MONTH, days)
+data2$MONTH = factor(data2$MONTH, months)
+data2$DEST_STATE_ABR = factor(data2$DEST_STATE_ABR, states)
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+X_data = model.matrix(DEP_DEL15~., data = data)
+y_data = data$DEP_DEL15
+
+X_data2 = model.matrix(DEP_DEL15~., data = data2)
+y_data2 = data2$DEP_DEL15
+
+#Refitting lasso and forest on 
+lasso2 = cv.glmnet(X_data, y_data, alpha = 1, nfolds = 5)
+forest2 = randomForest(as.factor(DEP_DEL15)~., data = data, ntree = 500, cutoff = c(.5,.5))
+
+#Predict models on 2016 dataset
+lasso.test.data2.min = predict(lasso2, newx = X_data2, s = lasso2$lambda.min)
+lasso.test.data2.1se = predict(lasso2, newx = X_data2, s = lasso2$lambda.1se)
+#Calculate average squared prediction errors on 2016 dataset
+lasso.test.data2.error.min = mean((y_data2-lasso.test.data2.min) ^ 2)
+lasso.test.data2.error.1se = mean((y_data2-lasso.test.data2.1se) ^ 2)
+#Report average squared prediction errors on 2016 dataset
+lasso.test.data2.error.min
+lasso.test.data2.error.1se
+
+forest.data2 = predict(forest2, newdata = data2)
+forest.data2.err = mean(as.factor(y_data2) != forest.data2)
+forest.data2.err
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+data2 = read.csv("flights2016_guess.csv")
+
+#Subsetting and removing variables as in training data
+data2 = subset(data2, data2$ORIGIN == "PIT")
+data2$ACTUAL_ELAPSED_TIME <- NULL
+data2$ARR_TIME <- NULL
+data2$ARR_TIME_BLK <- NULL
+data2$DEP_TIME <- NULL
+data2$TAXI_IN <- NULL
+data2$TAXI_OUT <- NULL
+data2$WHEELS_ON <- NULL
+data2$WHEELS_OFF <- NULL
+data2$AIR_TIME <- NULL
+data2$FIRST_DEP_TIME <- NULL
+data2$TOTAL_ADD_GTIME <- NULL
+data2$LONGEST_ADD_GTIME <- NULL
+data2$CARRIER_DELAY <- NULL
+data2$WEATHER_DELAY <- NULL
+data2$NAS_DELAY <- NULL
+data2$SECURITY_DELAY <- NULL
+data2$LATE_AIRCRAFT_DELAY <- NULL
+data2$ORIGIN <- NULL
+data2$ORIGIN_CITY_NAME <- NULL
+data2$ORIGIN_STATE_ABR <- NULL
+data2$ORIGIN_STATE_FIPS <- NULL
+data2$FL_DATE <- NULL
+data2$YEAR <- NULL
+data2$DEST_CITY_MARKET_ID <- NULL
+data2$DEST_AIRPORT_SEQ_ID <- NULL
+data2$DEST_AIRPORT_ID <- NULL
+data2$ORIGIN_CITY_MARKET_ID <- NULL
+data2$ORIGIN_AIRPORT_SEQ_ID <- NULL
+data2$FL_NUM <- NULL
+data2$FLIGHTS <- NULL
+data2$AIRLINE_ID <- NULL
+data2$ORIGIN_AIRPORT_ID <- NULL
+data2$DEST_CITY_NAME <- NULL
+data2$DEST_WAC <- NULL
+data2$DEST <- NULL
+data2$DEST_STATE_FIPS <- NULL
+data2$DEST_STATE_NM <- NULL
+data2$DEP_TIME_BLK <- NULL
+data2$ORIGIN_STATE_NM <- NULL
+data2$ORIGIN_WAC <- NULL
+data2$UNIQUE_CARRIER <- NULL
+data2$CANCELLATION_CODE <- NULL
+data2$DEP_DELAY <- NULL
+data2$DEP_DELAY_NEW <- NULL
+data2$DEP_DELAY_GROUP <- NULL
+data2$ARR_DELAY <- NULL
+data2$ARR_DELAY_NEW <- NULL
+data2$ARR_DELAY_GROUP <- NULL
+data2$ARR_DEL15 <- NULL
+data2$DIVERTED <- NULL
+data2$CANCELLED <- NULL
+data2$DISTANCE <- NULL
+data2$DISTANCE_GROUP <- NULL
+data2$TAIL_NUM <- NULL
+data2$CARRIER = as.factor(ifelse(data2$CARRIER == "WN", 1, 0))
+data2$DAY_OF_MONTH = factor(data2$DAY_OF_MONTH, days)
+data2$MONTH = factor(data2$MONTH, months)
+data2$DEST_STATE_ABR = factor(data2$DEST_STATE_ABR, states)
+data2$DEP_DEL15 <- NULL
+```
+
+```{r, message=F, warning=F, cache = TRUE}
+X_data2 = model.matrix(~., data = data2)
+#Predict models on 2016 dataset
+lasso.test.data2.min = predict(lasso2, newx = X_data2, s = lasso2$lambda.min)
+lasso.test.data2.1se = predict(lasso2, newx = X_data2, s = lasso2$lambda.1se)
+forest.data2 = predict(forest2, newdata = data2)
+
+#Predictions
+lasso.test.data2.min
+as.numeric(lasso.test.data2.1se >= 0.5)
+table(forest.data2)
+```
