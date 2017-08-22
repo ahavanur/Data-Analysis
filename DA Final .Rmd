@@ -1,0 +1,170 @@
+---
+title: "DA Final"
+author: "Apoorva Havanur"
+date: "12/13/2016"
+output: html_document
+---
+Setup 
+```{r}
+library(MASS)
+data = read.table('final-39.txt')
+attach(data)
+Date = as.Date(Date)
+```
+
+EDA 
+```{r}
+data$Date = as.Date(data$Date)
+summary(data)
+par(mfrow = c(1,1))
+par(mfrow = c(3,5))
+hist(Registered, col = "blue", xlab = "Registered Users Per Hour", ylab = "Frequency", main = "Distribution of Hourly Registered Users")
+hist(Date, col = "blue", breaks = 20, xlab = "Dates of Rides", ylab = "Frequency", main = "Distribution of Dates")
+barplot(table(Month), xlab = "Month", ylab = "Frequency", main = "Distribution of Month")
+barplot(table(Day), xlab = "Day", ylab = "Frequency", main = "Distribution of Day")
+barplot(table(Hour), xlab = "Hour", ylab = "Frequency", main = "Distribution of Hour")
+barplot(table(Holiday), xlab = "Is Holiday", ylab = "Frequency", main = "Distribution of Rides on Holidays")
+barplot(table(WorkDay), xlab = "Is a Work Day", ylab = "Frequency", main = "Distribution of Rides on Work Days")
+barplot(table(Weather), xlab = "Weather Type", ylab = "Frequency", main = "Rides in Various Weather Types")
+hist(Temp, xlab = "Normalized Temperature (in Celcius)", ylab = "Frequency", main = "Distribution of Temperature", col = "blue")
+hist(TempFeel, xlab = "Normalized 'Feels Like' Temperature (in Celcius)", ylab = "Frequency", main = "Distribution of 'Feels Like' Temperature", col = "blue")
+hist(Humidity, xlab = "Humidity Percentage", ylab = "Frequency", main = "Distribution of Humidity", col = "blue")
+hist(Windspeed, xlab = "Windspeed (km/h)", ylab = "Frequency", main = "Distribution of Windspeed", col = "blue")
+hist(Casual, xlab = "Casual Users Per Hour", ylab = "Frequency", main = "Distribution of Hourly Casual Users", col = "blue")
+
+
+source('panelfxns.R')
+vars = cbind(Registered, Month, Day, Hour, Temp, TempFeel, Humidity, Casual, Date)
+colnames(vars) = c("Registered", 'Month', "Day", "Hour", "Temp", "TempFeel", "Humidity", "Casual", "Date")
+pairs(vars, lower.panel = panel.cor, upper.panel = panel.smooth)
+par(mfrow = c(2,3))
+
+
+boxplot(Registered ~ Windspeed, main = "Registered vs Windspeed", ylab = "Registered", xlab = "Normalized Windspeed (km/h)")
+boxplot(Registered ~ Weather, main = "Registered vs Weather", ylab = "Registered", xlab = "Weather Type")
+boxplot(Temp ~ Windspeed, main = "Temp vs Windspeed", ylab = "Temp (in Celcius)", xlab = "Normalized Windspeed (km/h)")
+boxplot(TempFeel ~ Windspeed, main = "TempFeel vs Windspeed", ylab = "TempFeel (in Celcius)", xlab = "Normalized Windspeed (km/h)")
+boxplot(Humidity ~ Windspeed, main = "Humidity vs Windspeed", ylab = "Humidity Percentage", xlab = "Normalized Windspeed (km/h)")
+boxplot(Casual ~ Windspeed, main = "Hourly Casual Users vs Windspeed", ylab = "Casual Users", xlab = "Normalized Windspeed (km/h)")
+```
+
+Remodeling
+```{r}
+SeriousWeather = as.numeric(Weather > 2)
+Winter = as.numeric(Month %in% c(12, 1, 2))
+Spring = as.numeric(Month %in% c(3,4,5))
+Summer = as.numeric(Month %in% c(6,7,8))
+Fall = as.numeric(Month %in% c(9,10,11))
+tempHour = Hour
+busyHours = as.numeric(Hour > 7 & Hour < 20)
+
+Weekend = as.numeric(Day %in% c(0, 5, 6))
+```
+
+
+Initial Modeling 
+```{r}
+lin.reg.initial = lm(Registered ~ Year + Date + as.factor(Month) + Day + as.factor(Weather) + Temp + TempFeel + Humidity + Windspeed + Casual + WorkDay + Holiday + as.factor(Weather)*Holiday + Hour*WorkDay)
+round(summary(lin.reg.initial)$coefficients,2)
+round(confint(lin.reg.initial),2)
+```
+
+Initital Diagnostics
+```{r}
+par(mfrow = c(4,5))
+inres = lin.reg.initial$residuals
+plot(inres, pch = 20, main = "Residuals vs Index")
+abline(h = 0, col = "red")
+plot(as.factor(Year),inres, pch = 20, main = "Residuals vs. Year", xlab = "Year", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Date,inres, pch = 20, main = "Residuals vs. Date", xlab = "Date", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(Month),inres, pch = 20, main = "Residuals vs. Month", xlab = "Month Number", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Day,inres, pch = 20, main = "Residuals vs. Day", xlab = "Day Number", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(Weather),inres, pch = 20, main = "Residuals vs. Weather Type", xlab = "Weather Type", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Temp,inres, pch = 20, main = "Residuals vs. Temperature", xlab = "Temperature (C)", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(TempFeel,inres, pch = 20, main = "Residuals vs. TempFeel", xlab = "TempFeel (C)", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Humidity,inres, pch = 20, main = "Residuals vs. Humidity", xlab = "Humidtiy (%)", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Windspeed,inres, pch = 20, main = "Residuals vs. Windspeed", xlab = "Windspeed (km/h)", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(Casual,inres, pch = 20, main = "Residuals vs. Casual Users", xlab = "Casual Users", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(WorkDay),inres, pch = 20, main = "Residuals vs. Type of Day", xlab = "isWorkDay", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(Holiday),inres, pch = 20, main = "Residuals vs. Holiday", xlab = "isHoliday", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(Hour),inres, pch = 20, main = "Residuals vs. Hour", xlab = "Hour Number", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(as.factor(Weather*Holiday), inres, pch = 20, main = "Residuals vs. Weather*Holiday Interaction", xlab = "Weather Type * isHoliday", ylab = "Residual")
+abline(h = 0, col = "red")
+plot(WorkDay*Hour, inres, pch = 20, main = "Residuals vs. WorkDay*Hour Interaction", xlab = "isWorkday * Hour", ylab = "Residual")
+abline(h = 0, col = "red")
+x = boxcox(lm(Registered+1 ~ Year + Date + as.factor(Month) + Day + as.factor(Weather) + Temp + TempFeel + Humidity + Windspeed + Casual + WorkDay + Holiday + as.factor(Weather)*Holiday + Hour*WorkDay))
+title("Boxcox Plot of Initial Model")
+qqnorm(inres, pch = 20)
+qqline(inres)
+```
+
+
+Unadjusted Effects
+```{r}
+summary(lm(Registered ~ Date))
+summary(lm(Registered ~ Year))
+summary(lm(Registered ~(Month)))
+summary(lm(Registered ~ (Day)))
+summary(lm(Registered ~ (Hour)))
+summary(lm(Registered ~ busyHours))
+summary(lm(Registered ~ Holiday))
+summary(lm(Registered ~ WorkDay))
+summary(lm(Registered ~ (Weather)))
+summary(lm(Registered ~ Temp))
+summary(lm(Registered ~ TempFeel))
+summary(lm(Registered ~ Humidity))
+summary(lm(Registered ~ Windspeed))
+summary(lm(Registered ~ Casual))
+```
+
+
+
+Interaction Modelling
+```{r}
+par(mfrow = c(1,3))
+#weather and holiday
+boxplot(Registered[which(Holiday == 0)] ~ Weather[which(Holiday == 0)], main = "Registered Users Per Weather Type on Non-Holidays", xlab = "Weather Type", ylab = "Number of Registered Users", pch = 20)
+boxplot(Registered[which(Holiday == 1)] ~ Weather[which(Holiday == 1)], main = "Registered Users Per Weather Type on Holidays", xlab = "Weather Type", ylab = "Number of Registered Users", pch = 20)
+
+#hour weekend 
+plot(Registered[which(WorkDay == 0)] ~ Hour[which(WorkDay == 0)], pch = 20, col = "green", main = "Registered Users vs Hour of Day", ylab = "Number of Registered Users", xlab = "Hour of Day")
+abline(lm(Registered[which(WorkDay == 0)] ~ Hour[which(WorkDay == 0)]), col = "green")
+points(Registered[which(WorkDay == 1)] ~ Hour[which(WorkDay == 1)], pch = 20, col = "blue")
+abline(lm(Registered[which(WorkDay == 1)] ~ Hour[which(WorkDay == 1)]), col = "blue")
+legend(0, 450, legend = c("Non-Holiday", "Holiday"), col = c("green", "blue"), lty= 1)
+```
+
+Final Model
+```{r}
+lin.reg.final = lm(Registered^0.2 ~ Date + as.factor(Hour) + log(Casual+1) + as.factor(Hour):Weekend)
+summary(lin.reg.final)
+round(confint(lin.reg.final),2)
+par(mfrow = c(2,4))
+plot(lin.reg.final$residuals, pch = 20, main = "Residuals vs. Index")
+abline(h = 0, col = "red")
+plot(Date, lin.reg.final$residuals, pch = 20, main = "Residuals vs. Date", xlab = "Date", ylab = "Residuals")
+abline(h = 0, col = "red")
+plot(log(Casual+1), lin.reg.final$residuals, pch = 20, main = "Residuals vs. log(Casual)", xlab = "Log(Casual)", ylab = "Residuals")
+abline(h = 0, col = "red")
+plot(as.factor(Hour), lin.reg.final$residuals, pch = 20, main = "Residuals vs. Hour", xlab = "Hour", ylab = "Residuals")
+abline(h = 0, col = "red")
+boxplot(lin.reg.final$residuals ~ as.factor(Hour)*Weekend, pch = 20, main = "Residuals vs. Hour*Weeked", xlab = "Hour*Weekend", ylab = "Residuals")
+abline(h = 0, col = "red")
+boxcox((Registered+1)^0.2 ~ Date + as.factor(Hour) + log(Casual+1) + as.factor(Hour):Weekend)
+qqnorm(lin.reg.temp$residuals, pch = 20)
+qqline(lin.reg.initial$residuals)
+```
+
